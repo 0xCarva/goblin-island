@@ -1,1 +1,183 @@
 
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jogo da Ilha com Tiles</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const TILE_SIZE = 32;
+    const MAP_SIZE = 25;
+
+    const goblinImg = new Image();
+    goblinImg.src = "spr_walk_strip8.png";
+
+    const player = {
+      x: 12 * TILE_SIZE,
+      y: 12 * TILE_SIZE,
+      width: TILE_SIZE,
+      height: TILE_SIZE,
+      speed: 2,
+      frame: 0,
+      frameTick: 0,
+      frameMax: 8
+    };
+
+    const keys = {};
+    document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    const grassImg = new Image();
+    grassImg.src = "https://i.imgur.com/zld5dSC.png";
+    const waterImg = new Image();
+    waterImg.src = "https://i.imgur.com/yYe1M43.png";
+    const treeImg = new Image();
+    treeImg.src = "https://i.imgur.com/yQsxv9r.png";
+
+    const solidTiles = new Set();
+    const trees = [
+      [5, 5], [6, 5], [15, 10], [18, 14], [10, 20], [7, 17]
+    ];
+
+    function drawTile(img, dx, dy, size = TILE_SIZE) {
+      ctx.drawImage(img, dx, dy, size, size);
+    }
+
+    function drawMap() {
+      for (let y = 0; y < MAP_SIZE; y++) {
+        for (let x = 0; x < MAP_SIZE; x++) {
+          const dx = canvas.width / 2 - MAP_SIZE * TILE_SIZE / 2 + x * TILE_SIZE;
+          const dy = canvas.height / 2 - MAP_SIZE * TILE_SIZE / 2 + y * TILE_SIZE;
+
+          if (x === 0 || y === 0 || x === MAP_SIZE - 1 || y === MAP_SIZE - 1) {
+            drawTile(waterImg, dx, dy);
+            solidTiles.add(`${x},${y}`);
+          } else {
+            drawTile(grassImg, dx, dy);
+          }
+        }
+      }
+    }
+
+    function drawTrees(drawBehind = true) {
+      for (const [x, y] of trees) {
+        const drawX = canvas.width / 2 - MAP_SIZE * TILE_SIZE / 2 + x * TILE_SIZE;
+        const drawY = canvas.height / 2 - MAP_SIZE * TILE_SIZE / 2 + y * TILE_SIZE;
+
+        const px = canvas.width / 2 - MAP_SIZE * TILE_SIZE / 2 + Math.floor(player.x / TILE_SIZE) * TILE_SIZE;
+        const py = canvas.height / 2 - MAP_SIZE * TILE_SIZE / 2 + Math.floor(player.y / TILE_SIZE) * TILE_SIZE;
+
+        const playerBehind = py + TILE_SIZE <= drawY;
+
+        if ((drawBehind && playerBehind) || (!drawBehind && !playerBehind)) {
+          ctx.drawImage(treeImg, drawX, drawY - TILE_SIZE, TILE_SIZE, TILE_SIZE * 2);
+        }
+      }
+    }
+
+    function updateSolidTiles() {
+      solidTiles.clear();
+      for (let y = 0; y < MAP_SIZE; y++) {
+        for (let x = 0; x < MAP_SIZE; x++) {
+          if (x === 0 || y === 0 || x === MAP_SIZE - 1 || y === MAP_SIZE - 1) {
+            solidTiles.add(`${x},${y}`);
+          }
+        }
+      }
+      for (const [x, y] of trees) {
+        solidTiles.add(`${x},${y}`);
+      }
+    }
+
+    function canMove(newX, newY) {
+      const tileX = Math.floor((newX + TILE_SIZE / 2) / TILE_SIZE);
+      const tileY = Math.floor((newY + TILE_SIZE - 1) / TILE_SIZE);
+      return !solidTiles.has(`${tileX},${tileY}`);
+    }
+
+    function updatePlayer() {
+      let moved = false;
+      let dx = 0, dy = 0;
+
+      if (keys['w']) { dy = -player.speed; moved = true; }
+      if (keys['s']) { dy = player.speed; moved = true; }
+      if (keys['a']) { dx = -player.speed; moved = true; }
+      if (keys['d']) { dx = player.speed; moved = true; }
+
+      const newX = player.x + dx;
+      const newY = player.y + dy;
+      if (canMove(newX, newY)) {
+        player.x = newX;
+        player.y = newY;
+      }
+
+      if (moved) {
+        player.frameTick++;
+        if (player.frameTick >= 8) {
+          player.frameTick = 0;
+          player.frame = (player.frame + 1) % player.frameMax;
+        }
+      } else {
+        player.frame = 0;
+      }
+    }
+
+    function drawPlayer() {
+      const frameWidth = goblinImg.width / player.frameMax;
+      const drawX = canvas.width / 2 - player.width / 2;
+      const drawY = canvas.height / 2 - player.height / 2;
+
+      ctx.drawImage(
+        goblinImg,
+        player.frame * frameWidth, 0,
+        frameWidth, goblinImg.height,
+        drawX, drawY,
+        TILE_SIZE, TILE_SIZE
+      );
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMap();
+      drawTrees(true);
+      drawPlayer();
+      drawTrees(false);
+    }
+
+    function loop() {
+      updatePlayer();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    grassImg.onload = () => {
+      waterImg.onload = () => {
+        treeImg.onload = () => {
+          goblinImg.onload = () => {
+            updateSolidTiles();
+            loop();
+          };
+        };
+      };
+    };
+  </script>
+</body>
+</html>
